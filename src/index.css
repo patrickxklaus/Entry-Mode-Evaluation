@@ -32,3 +32,90 @@ nav h1 {
   margin: 20px auto;
   padding: 20px;
 }
+
+/* Matrix styles */
+.matrix-wrapper {
+  overflow: auto;
+}
+.matrix {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+.matrix th, .matrix td {
+  border: 1px solid #e5e5e5;
+  padding: 8px;
+  vertical-align: middle;
+  text-align: center;
+}
+.matrix th:first-child, .matrix td:first-child {
+  text-align: left;
+}
+.matrix input[type="number"] {
+  width: 80px;
+  padding: 6px;
+}
+.matrix .total {
+  font-weight: 600;
+}
+.mode-cell {
+  font-weight: 500;
+}
+.ranking ol {
+  margin: 0;
+}
+.file-input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #eee;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.file-input input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+button {
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+}
+button:hover { background: #f6f6f6; }
+
+/* Cards and form rows */
+.card {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 16px;
+  margin: 16px 0;
+}
+.row {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 12px;
+  align-items: start;
+  margin: 10px 0;
+}
+.row label {
+  font-weight: 500;
+}
+input[type="text"], input:not([type]), input[type="number"], textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.sources .source-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
