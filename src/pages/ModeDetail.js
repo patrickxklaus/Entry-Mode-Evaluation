@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useParams, Link } from "react-router-dom"
-import { criteria, criterionById, entryModes, modeSlug, rubricGuidance } from "../data/defaults"
+import { criteria, criterionById, entryModes, modeSlug } from "../data/defaults"
+import { rubricsByMode } from "../data/rubrics"
 
 const STORAGE_KEY = "entry-mode-matrix-v2"
 
@@ -131,20 +132,27 @@ export default function ModeDetail() {
         </div>
       </div>
 
-      <div className="rubric card">
-        <details>
-          <summary>Rubric Guidance</summary>
-          <ul>
-            {rubricGuidance.map((t, i) => (<li key={i}>{t}</li>))}
-          </ul>
-        </details>
-      </div>
+      {null}
 
       {criteria.map((c) => {
         const v = details.variables[c.id]
         return (
           <div className="card" key={c.id}>
             <h3 style={{ marginBottom: 10 }}>{c.label} <small>({c.min} to {c.max})</small></h3>
+            <div className="row">
+              <label>Rubric</label>
+              <div>
+                <details>
+                  <summary>Open rubric for {c.label}</summary>
+                  <pre style={{ whiteSpace: 'pre-wrap' }}>{(() => {
+                    const slug = modeSlug(modeName)
+                    const map = rubricsByMode[slug] || {}
+                    const text = map[c.id]
+                    return text || '—'
+                  })()}</pre>
+                </details>
+              </div>
+            </div>
             <div className="row">
               <label>Points Given</label>
               <input type="number" value={v.points} min={c.min} max={c.max} step={1} onChange={(e) => setPoints(c.id, e.target.value)} />
