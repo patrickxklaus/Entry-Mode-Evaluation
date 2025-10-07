@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import supabase from "../config/supabaseClient"
 import { criteria, entryModes, modeSlug } from "../data/defaults"
+import {
+  createMatrix as createMatrixRow,
+  getMatrixById,
+  getEvaluationsForMatrix,
+  getModeNotesForMatrix,
+  updateMatrix as updateMatrixRow,
+} from "../services/supabaseData"
+import { useMatrixContext } from "../context/MatrixContext"
 
 const normalizeKey = (value) =>
   value?.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, "_") ?? ""
@@ -17,6 +24,14 @@ const buildEmptyScores = () => {
   return grid
 }
 
+const buildEmptyModeNotes = () => {
+  const map = {}
+  for (const mode of entryModes) {
+    map[mode] = { discussions: "", observations: "" }
+  }
+  return map
+}
+
 const editableFields = ["title", "country", "company_name", "product_service"]
 
 const buildEmptyMeta = () =>
@@ -26,41 +41,56 @@ const buildEmptyMeta = () =>
   }, {})
 
 export default function Matrix() {
+  const { activeMatrixId, setActiveMatrixId, reloadCounter, triggerReload } = useMatrixContext()
   const [scores, setScores] = useState(() => buildEmptyScores())
+  const [matrixIdInput, setMatrixIdInput] = useState(() => activeMatrixId ?? "")
   const [matrixMeta, setMatrixMeta] = useState(null)
+  const [modeNotes, setModeNotes] = useState(() => buildEmptyModeNotes())
   const [editableMeta, setEditableMeta] = useState(() => buildEmptyMeta())
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [savingMeta, setSavingMeta] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(null)
+  const [creatingMatrix, setCreatingMatrix] = useState(false)
 
   useEffect(() => {
     let isMounted = true
 
     const fetchMatrix = async () => {
+      if (!activeMatrixId) {
+        setLoading(false)
+        setMatrixMeta(null)
+        setEditableMeta(buildEmptyMeta())
+        setScores(buildEmptyScores())
+        setModeNotes(buildEmptyModeNotes())
+        return
+      }
+
       setLoading(true)
       setError(null)
+      setSaveError(null)
+      setSaveSuccess(null)
 
       try {
-        const { data: matrices, error: matricesError } = await supabase
-          .from("matrices")
-          .select("*")
-          .order("updated_at", { ascending: false })
-          .limit(1)
+        const activeMatrix = await getMatrixById(activeMatrixId)
 
-        if (matricesError) throw matricesError
+        if (!activeMatrix) {
+          if (isMounted) {
+            setError("Matrix not found. Please verify the ID or create a new matrix.")
+            setMatrixMeta(null)
+            setEditableMeta(buildEmptyMeta())
+            setScores(buildEmptyScores())
+            setModeNotes(buildEmptyModeNotes())
+            setActiveMatrixId(null)
+          }
+          return
+        }
 
-        const activeMatrix = matrices?.[0] ?? null
         const nextScores = buildEmptyScores()
 
         if (activeMatrix) {
-          const { data: evaluations, error: evaluationsError } = await supabase
-            .from("evaluations")
-            .select("mode, criterion, points")
-            .eq("matrix_id", activeMatrix.id)
-
-          if (evaluationsError) throw evaluationsError
+          const evaluations = await getEvaluationsForMatrix(activeMatrix.id)
 
           const modeLookup = new Map(entryModes.map((mode) => [normalizeKey(mode), mode]))
           const criterionLookup = new Map()
@@ -80,6 +110,23 @@ export default function Matrix() {
               nextScores[modeName][criterionId] = Number.isFinite(points) ? points : 0
             }
           }
+
+          const modeNotesRows = await getModeNotesForMatrix(activeMatrix.id)
+          const nextModeNotes = buildEmptyModeNotes()
+          for (const note of modeNotesRows || []) {
+            const normalizedMode = normalizeKey(note.mode)
+            const modeName = modeLookup.get(normalizedMode)
+            if (modeName) {
+              nextModeNotes[modeName] = {
+                discussions: note.discussions ?? "",
+                observations: note.observations ?? "",
+              }
+            }
+          }
+
+          if (isMounted) {
+            setModeNotes(nextModeNotes)
+          }
         }
 
         if (isMounted) {
@@ -92,6 +139,7 @@ export default function Matrix() {
             }
             return base
           })
+          setMatrixIdInput(activeMatrix.id)
         }
       } catch (err) {
         console.error("Failed to load matrix data", err)
@@ -100,6 +148,7 @@ export default function Matrix() {
           setScores(buildEmptyScores())
           setMatrixMeta(null)
           setEditableMeta(buildEmptyMeta())
+          setModeNotes(buildEmptyModeNotes())
         }
       } finally {
         if (isMounted) {
@@ -112,7 +161,47 @@ export default function Matrix() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [activeMatrixId, reloadCounter])
+
+  useEffect(() => {
+    setMatrixIdInput(activeMatrixId ?? "")
+  }, [activeMatrixId])
+
+  const handleLoadMatrix = (event) => {
+    event?.preventDefault?.()
+    const trimmedId = matrixIdInput.trim()
+    if (!trimmedId) {
+      setError("Please enter a matrix ID to load.")
+      setActiveMatrixId(null)
+      setMatrixMeta(null)
+      setEditableMeta(buildEmptyMeta())
+      setScores(buildEmptyScores())
+      return
+    }
+    setError(null)
+    if (trimmedId === activeMatrixId) {
+      triggerReload()
+    } else {
+      setActiveMatrixId(trimmedId)
+    }
+  }
+
+  const handleCreateMatrix = async () => {
+    setCreatingMatrix(true)
+    setError(null)
+    setSaveError(null)
+    setSaveSuccess(null)
+    try {
+      const matrix = await createMatrixRow()
+      setMatrixIdInput(matrix.id)
+      setActiveMatrixId(matrix.id)
+    } catch (err) {
+      console.error("Failed to create matrix", err)
+      setError("Could not create a new matrix. Please try again.")
+    } finally {
+      setCreatingMatrix(false)
+    }
+  }
 
   const totals = useMemo(() => {
     const out = {}
@@ -131,11 +220,48 @@ export default function Matrix() {
     return [...entryModes].sort((a, b) => (totals[b] ?? 0) - (totals[a] ?? 0))
   }, [totals])
 
+  const hasModeNotes = useMemo(() => {
+    return Object.values(modeNotes || {}).some(
+      (note) =>
+        (note.discussions && note.discussions.trim().length > 0) ||
+        (note.observations && note.observations.trim().length > 0)
+    )
+  }, [modeNotes])
+
   const top = ranked[0]
   const topScore = totals[top] ?? 0
 
   return (
     <div className="page">
+      <form
+        onSubmit={handleLoadMatrix}
+        style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}
+      >
+        <label style={{ display: "grid", gap: 4 }}>
+          <span><strong>Matrix ID</strong></span>
+          <input
+            type="text"
+            value={matrixIdInput}
+            onChange={(event) => setMatrixIdInput(event.target.value)}
+            placeholder="Paste or enter matrix UUID"
+            style={{ minWidth: 280 }}
+          />
+        </label>
+        <button type="submit">Load Matrix</button>
+        <button type="button" onClick={handleCreateMatrix} disabled={creatingMatrix}>
+          {creatingMatrix ? "Creating…" : "Create New Matrix"}
+        </button>
+        {activeMatrixId && (
+          <span style={{ fontSize: 12, color: "#555" }}>Currently loaded: {activeMatrixId}</span>
+        )}
+      </form>
+
+      {!activeMatrixId && (
+        <p style={{ marginBottom: 16 }}>
+          Enter a matrix ID to load existing data or create a new matrix to begin editing.
+        </p>
+      )}
+
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
         <h2 style={{ marginRight: 12 }}>
           Internationalization Strategy Matrix{matrixMeta?.title ? ` – ${matrixMeta.title}` : ""}
@@ -156,20 +282,13 @@ export default function Matrix() {
               for (const field of editableFields) {
                 updatePayload[field] = editableMeta[field]
               }
-              const { data, error: updateError } = await supabase
-                .from("matrices")
-                .update(updatePayload)
-                .eq("id", matrixMeta.id)
-                .select()
-                .single()
+              const updated = await updateMatrixRow(matrixMeta.id, updatePayload)
 
-              if (updateError) throw updateError
-
-              setMatrixMeta(data)
+              setMatrixMeta(updated)
               setEditableMeta(() => {
                 const base = buildEmptyMeta()
                 for (const field of editableFields) {
-                  base[field] = data?.[field] ?? ""
+                  base[field] = updated?.[field] ?? ""
                 }
                 return base
               })
@@ -287,6 +406,25 @@ export default function Matrix() {
           ))}
         </ol>
       </div>
+
+      {hasModeNotes && (
+        <div className="mode-notes">
+          <h3>Mode Notes</h3>
+          <ul>
+            {entryModes.map((mode) => {
+              const note = modeNotes[mode] || {}
+              const summary = note.discussions || note.observations
+              if (!summary) return null
+              const trimmed = summary.length > 160 ? `${summary.slice(0, 160)}…` : summary
+              return (
+                <li key={mode}>
+                  <strong>{mode}:</strong> {trimmed}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
 
       <div className="suggestion">
         <h3>Suggestion Based on Results</h3>
