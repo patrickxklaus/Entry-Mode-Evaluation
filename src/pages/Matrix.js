@@ -1,47 +1,125 @@
 import { useEffect, useMemo, useState } from "react"
-import { criteria, entryModes, modeSlug } from "../data/defaults"
 import { Link } from "react-router-dom"
+import supabase from "../config/supabaseClient"
+import { criteria, entryModes, modeSlug } from "../data/defaults"
 
-const clamp = (val, min, max) => {
-  const n = Number(val)
-  if (Number.isNaN(n)) return 0
-  return Math.max(min, Math.min(max, n))
-}
+const normalizeKey = (value) =>
+  value?.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, "_") ?? ""
 
-const buildInitialScores = () => {
-  const scores = {}
+const buildEmptyScores = () => {
+  const grid = {}
   for (const mode of entryModes) {
-    scores[mode] = {}
+    grid[mode] = {}
     for (const c of criteria) {
-      scores[mode][c.id] = 0
+      grid[mode][c.id] = 0
     }
   }
-  return scores
+  return grid
 }
 
-const STORAGE_KEY = "entry-mode-matrix-v2"
+const editableFields = ["title", "country", "company_name", "product_service"]
+
+const buildEmptyMeta = () =>
+  editableFields.reduce((acc, key) => {
+    acc[key] = ""
+    return acc
+  }, {})
 
 export default function Matrix() {
-  const [scores, setScores] = useState(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) return JSON.parse(raw)
-    } catch {}
-    return { scores: buildInitialScores(), details: {}, country: "", note: "" }
-  })
-  const country = scores.country || ""
-  const note = scores.note || ""
+  const [scores, setScores] = useState(() => buildEmptyScores())
+  const [matrixMeta, setMatrixMeta] = useState(null)
+  const [editableMeta, setEditableMeta] = useState(() => buildEmptyMeta())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [savingMeta, setSavingMeta] = useState(false)
+  const [saveError, setSaveError] = useState(null)
+  const [saveSuccess, setSaveSuccess] = useState(null)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(scores))
-  }, [scores])
+    let isMounted = true
+
+    const fetchMatrix = async () => {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const { data: matrices, error: matricesError } = await supabase
+          .from("matrices")
+          .select("*")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+
+        if (matricesError) throw matricesError
+
+        const activeMatrix = matrices?.[0] ?? null
+        const nextScores = buildEmptyScores()
+
+        if (activeMatrix) {
+          const { data: evaluations, error: evaluationsError } = await supabase
+            .from("evaluations")
+            .select("mode, criterion, points")
+            .eq("matrix_id", activeMatrix.id)
+
+          if (evaluationsError) throw evaluationsError
+
+          const modeLookup = new Map(entryModes.map((mode) => [normalizeKey(mode), mode]))
+          const criterionLookup = new Map()
+          for (const c of criteria) {
+            criterionLookup.set(normalizeKey(c.id), c.id)
+            criterionLookup.set(normalizeKey(c.label), c.id)
+          }
+
+          for (const row of evaluations || []) {
+            const normalizedMode = normalizeKey(row.mode)
+            const normalizedCriterion = normalizeKey(row.criterion)
+            const modeName = modeLookup.get(normalizedMode)
+            const criterionId = criterionLookup.get(normalizedCriterion)
+            const points = Number(row.points)
+
+            if (modeName && criterionId) {
+              nextScores[modeName][criterionId] = Number.isFinite(points) ? points : 0
+            }
+          }
+        }
+
+        if (isMounted) {
+          setMatrixMeta(activeMatrix)
+          setScores(nextScores)
+          setEditableMeta(() => {
+            const base = buildEmptyMeta()
+            for (const field of editableFields) {
+              base[field] = activeMatrix?.[field] ?? ""
+            }
+            return base
+          })
+        }
+      } catch (err) {
+        console.error("Failed to load matrix data", err)
+        if (isMounted) {
+          setError("Could not load data from Supabase.")
+          setScores(buildEmptyScores())
+          setMatrixMeta(null)
+          setEditableMeta(buildEmptyMeta())
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchMatrix()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const totals = useMemo(() => {
     const out = {}
     for (const mode of entryModes) {
       let sum = 0
       for (const c of criteria) {
-        const v = Number(scores?.scores?.[mode]?.[c.id] ?? 0)
+        const v = Number(scores?.[mode]?.[c.id] ?? 0)
         sum += v * (c.weight ?? 1)
       }
       out[mode] = sum
@@ -53,66 +131,119 @@ export default function Matrix() {
     return [...entryModes].sort((a, b) => (totals[b] ?? 0) - (totals[a] ?? 0))
   }, [totals])
 
-  const handleChange = (mode, c, value) => {
-    setScores((prev) => ({
-      ...prev,
-      scores: {
-        ...(prev.scores || {}),
-        [mode]: {
-          ...(prev.scores?.[mode] || {}),
-          [c.id]: clamp(value, c.min, c.max),
-        },
-      },
-    }))
-  }
-
-  const exportJSON = () => {
-    const blob = new Blob([JSON.stringify(scores, null, 2)], {
-      type: "application/json",
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `entry-mode-matrix${country ? `-${country}` : ""}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const importJSON = (file) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result)
-        if (data && (data.scores || data.details)) setScores(data)
-      } catch (e) {
-        console.error("Invalid JSON", e)
-      }
-    }
-    reader.readAsText(file)
-  }
-
   const top = ranked[0]
   const topScore = totals[top] ?? 0
 
   return (
     <div className="page">
-      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ marginRight: 12 }}>Internationalization Strategy Matrix</h2>
-        <input
-          placeholder="Country (optional)"
-          value={country}
-          onChange={(e) => setScores(prev => ({ ...prev, country: e.target.value }))}
-          style={{ padding: 6 }}
-        />
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button onClick={exportJSON}>Export JSON</button>
-          <label className="file-input">
-            Import JSON
-            <input type="file" accept="application/json" onChange={(e) => e.target.files?.[0] && importJSON(e.target.files[0])} />
-          </label>
-          <button onClick={() => setScores({ scores: buildInitialScores(), details: {}, country: "", note: "" })}>Reset</button>
-        </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <h2 style={{ marginRight: 12 }}>
+          Internationalization Strategy Matrix{matrixMeta?.title ? ` – ${matrixMeta.title}` : ""}
+        </h2>
+        {matrixMeta?.country && <span>Country: {matrixMeta.country}</span>}
       </div>
+
+      {matrixMeta && (
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault()
+            if (!matrixMeta?.id) return
+            setSavingMeta(true)
+            setSaveError(null)
+            setSaveSuccess(null)
+            try {
+              const updatePayload = {}
+              for (const field of editableFields) {
+                updatePayload[field] = editableMeta[field]
+              }
+              const { data, error: updateError } = await supabase
+                .from("matrices")
+                .update(updatePayload)
+                .eq("id", matrixMeta.id)
+                .select()
+                .single()
+
+              if (updateError) throw updateError
+
+              setMatrixMeta(data)
+              setEditableMeta(() => {
+                const base = buildEmptyMeta()
+                for (const field of editableFields) {
+                  base[field] = data?.[field] ?? ""
+                }
+                return base
+              })
+              setSaveSuccess("Details saved.")
+            } catch (err) {
+              console.error("Failed to update matrix metadata", err)
+              setSaveError("Could not save the details. Please try again.")
+            } finally {
+              setSavingMeta(false)
+            }
+          }}
+          style={{ display: "grid", gap: 12, marginTop: 12, marginBottom: 20, maxWidth: 520 }}
+        >
+          <label style={{ display: "grid", gap: 4 }}>
+            <span><strong>Title</strong></span>
+            <input
+              type="text"
+              value={editableMeta.title}
+              onChange={(event) => {
+                const { value } = event.target
+                setEditableMeta((prev) => ({ ...prev, title: value }))
+                setSaveSuccess(null)
+              }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 4 }}>
+            <span><strong>Country</strong></span>
+            <input
+              type="text"
+              value={editableMeta.country}
+              onChange={(event) => {
+                const { value } = event.target
+                setEditableMeta((prev) => ({ ...prev, country: value }))
+                setSaveSuccess(null)
+              }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 4 }}>
+            <span><strong>Company</strong></span>
+            <input
+              type="text"
+              value={editableMeta.company_name}
+              onChange={(event) => {
+                const { value } = event.target
+                setEditableMeta((prev) => ({ ...prev, company_name: value }))
+                setSaveSuccess(null)
+              }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 4 }}>
+            <span><strong>Product / Service</strong></span>
+            <input
+              type="text"
+              value={editableMeta.product_service}
+              onChange={(event) => {
+                const { value } = event.target
+                setEditableMeta((prev) => ({ ...prev, product_service: value }))
+                setSaveSuccess(null)
+              }}
+            />
+          </label>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button type="submit" disabled={savingMeta}>
+              {savingMeta ? "Saving…" : "Save Details"}
+            </button>
+            {saveError && <span style={{ color: "red" }}>{saveError}</span>}
+            {saveSuccess && <span style={{ color: "green" }}>{saveSuccess}</span>}
+          </div>
+        </form>
+      )}
+
+      {loading && <p>Loading matrix scores…</p>}
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
       <div className="matrix-wrapper">
         <table className="matrix">
@@ -136,15 +267,7 @@ export default function Matrix() {
                 <td className="mode-cell"><Link to={`/mode/${modeSlug(mode)}`}>{mode}</Link></td>
                 {criteria.map((c) => (
                   <td key={c.id}>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      step={1}
-                      value={scores?.scores?.[mode]?.[c.id] ?? 0}
-                      min={c.min}
-                      max={c.max}
-                      onChange={(e) => handleChange(mode, c, e.target.value)}
-                    />
+                    {scores?.[mode]?.[c.id] ?? 0}
                   </td>
                 ))}
                 <td className="total">{totals[mode] ?? 0}</td>
@@ -171,7 +294,7 @@ export default function Matrix() {
           {top ? (
             <>
               Top option: <strong>{top}</strong> with score <strong>{topScore}</strong>
-              {country ? ` for ${country}` : ""}.
+              {matrixMeta?.country ? ` for ${matrixMeta.country}` : ""}.
             </>
           ) : (
             "Add scores to see a suggestion."
@@ -179,8 +302,8 @@ export default function Matrix() {
         </p>
         <textarea
           placeholder="Add qualitative reasoning, risks, implementation considerations..."
-          value={note}
-          onChange={(e) => setScores(prev => ({ ...prev, note: e.target.value }))}
+          value={matrixMeta?.suggestion_text || ""}
+          readOnly
           rows={4}
           style={{ width: "100%" }}
         />
