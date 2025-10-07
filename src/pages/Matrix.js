@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { criteria, entryModes, modeSlug } from "../data/defaults"
 import {
@@ -54,6 +54,37 @@ export default function Matrix() {
   const [saveSuccess, setSaveSuccess] = useState(null)
   const [creatingMatrix, setCreatingMatrix] = useState(false)
 
+  const syncEditableMeta = useCallback((data) => {
+    setEditableMeta(() => {
+      const base = buildEmptyMeta()
+      for (const field of editableFields) {
+        base[field] = data?.[field] ?? ""
+      }
+      return base
+    })
+  }, [])
+
+  const saveMetaField = async (field) => {
+    if (!matrixMeta?.id) return
+    const newValue = editableMeta[field]
+    const currentValue = matrixMeta?.[field] ?? ""
+    if (currentValue === newValue) return
+    setSavingMeta(true)
+    setSaveError(null)
+    setSaveSuccess(null)
+    try {
+      const updated = await updateMatrixRow(matrixMeta.id, { [field]: newValue })
+      setMatrixMeta(updated)
+      syncEditableMeta(updated)
+      setSaveSuccess("Details saved.")
+    } catch (err) {
+      console.error("Failed to update matrix metadata", err)
+      setSaveError("Could not save the details. Please try again.")
+    } finally {
+      setSavingMeta(false)
+    }
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -61,7 +92,7 @@ export default function Matrix() {
       if (!activeMatrixId) {
         setLoading(false)
         setMatrixMeta(null)
-        setEditableMeta(buildEmptyMeta())
+        syncEditableMeta(null)
         setScores(buildEmptyScores())
         setModeNotes(buildEmptyModeNotes())
         return
@@ -79,7 +110,7 @@ export default function Matrix() {
           if (isMounted) {
             setError("Matrix not found. Please verify the ID or create a new matrix.")
             setMatrixMeta(null)
-            setEditableMeta(buildEmptyMeta())
+            syncEditableMeta(null)
             setScores(buildEmptyScores())
             setModeNotes(buildEmptyModeNotes())
             setActiveMatrixId(null)
@@ -132,13 +163,7 @@ export default function Matrix() {
         if (isMounted) {
           setMatrixMeta(activeMatrix)
           setScores(nextScores)
-          setEditableMeta(() => {
-            const base = buildEmptyMeta()
-            for (const field of editableFields) {
-              base[field] = activeMatrix?.[field] ?? ""
-            }
-            return base
-          })
+          syncEditableMeta(activeMatrix)
           setMatrixIdInput(activeMatrix.id)
         }
       } catch (err) {
@@ -147,7 +172,7 @@ export default function Matrix() {
           setError("Could not load data from Supabase.")
           setScores(buildEmptyScores())
           setMatrixMeta(null)
-          setEditableMeta(buildEmptyMeta())
+          syncEditableMeta(null)
           setModeNotes(buildEmptyModeNotes())
         }
       } finally {
@@ -161,7 +186,7 @@ export default function Matrix() {
     return () => {
       isMounted = false
     }
-  }, [activeMatrixId, reloadCounter])
+  }, [activeMatrixId, reloadCounter, syncEditableMeta])
 
   useEffect(() => {
     setMatrixIdInput(activeMatrixId ?? "")
@@ -174,7 +199,7 @@ export default function Matrix() {
       setError("Please enter a matrix ID to load.")
       setActiveMatrixId(null)
       setMatrixMeta(null)
-      setEditableMeta(buildEmptyMeta())
+      syncEditableMeta(null)
       setScores(buildEmptyScores())
       return
     }
@@ -190,7 +215,7 @@ export default function Matrix() {
     setCreatingMatrix(true)
     setError(null)
     setSaveError(null)
-    setSaveSuccess(null)
+      setSaveSuccess(null)
     try {
       const matrix = await createMatrixRow()
       setMatrixIdInput(matrix.id)
@@ -233,6 +258,12 @@ export default function Matrix() {
 
   return (
     <div className="page">
+      <div style={{ minHeight: 24, marginBottom: 8 }}>
+        {savingMeta && <span>Saving…</span>}
+        {!savingMeta && saveError && <span style={{ color: "red" }}>{saveError}</span>}
+        {!savingMeta && saveSuccess && <span style={{ color: "green" }}>{saveSuccess}</span>}
+      </div>
+
       <form
         onSubmit={handleLoadMatrix}
         style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}
@@ -270,38 +301,7 @@ export default function Matrix() {
       </div>
 
       {matrixMeta && (
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault()
-            if (!matrixMeta?.id) return
-            setSavingMeta(true)
-            setSaveError(null)
-            setSaveSuccess(null)
-            try {
-              const updatePayload = {}
-              for (const field of editableFields) {
-                updatePayload[field] = editableMeta[field]
-              }
-              const updated = await updateMatrixRow(matrixMeta.id, updatePayload)
-
-              setMatrixMeta(updated)
-              setEditableMeta(() => {
-                const base = buildEmptyMeta()
-                for (const field of editableFields) {
-                  base[field] = updated?.[field] ?? ""
-                }
-                return base
-              })
-              setSaveSuccess("Details saved.")
-            } catch (err) {
-              console.error("Failed to update matrix metadata", err)
-              setSaveError("Could not save the details. Please try again.")
-            } finally {
-              setSavingMeta(false)
-            }
-          }}
-          style={{ display: "grid", gap: 12, marginTop: 12, marginBottom: 20, maxWidth: 520 }}
-        >
+        <div style={{ display: "grid", gap: 12, marginTop: 12, marginBottom: 20, maxWidth: 520 }}>
           <label style={{ display: "grid", gap: 4 }}>
             <span><strong>Title</strong></span>
             <input
@@ -311,7 +311,10 @@ export default function Matrix() {
                 const { value } = event.target
                 setEditableMeta((prev) => ({ ...prev, title: value }))
                 setSaveSuccess(null)
+                setSaveError(null)
               }}
+              onBlur={() => saveMetaField("title")}
+              placeholder="International Strategy"
             />
           </label>
           <label style={{ display: "grid", gap: 4 }}>
@@ -323,7 +326,10 @@ export default function Matrix() {
                 const { value } = event.target
                 setEditableMeta((prev) => ({ ...prev, country: value }))
                 setSaveSuccess(null)
+                setSaveError(null)
               }}
+              onBlur={() => saveMetaField("country")}
+              placeholder="Target market country"
             />
           </label>
           <label style={{ display: "grid", gap: 4 }}>
@@ -335,7 +341,10 @@ export default function Matrix() {
                 const { value } = event.target
                 setEditableMeta((prev) => ({ ...prev, company_name: value }))
                 setSaveSuccess(null)
+                setSaveError(null)
               }}
+              onBlur={() => saveMetaField("company_name")}
+              placeholder="Company name"
             />
           </label>
           <label style={{ display: "grid", gap: 4 }}>
@@ -347,18 +356,14 @@ export default function Matrix() {
                 const { value } = event.target
                 setEditableMeta((prev) => ({ ...prev, product_service: value }))
                 setSaveSuccess(null)
+                setSaveError(null)
               }}
+              onBlur={() => saveMetaField("product_service")}
+              placeholder="Describe the offering"
             />
           </label>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button type="submit" disabled={savingMeta}>
-              {savingMeta ? "Saving…" : "Save Details"}
-            </button>
-            {saveError && <span style={{ color: "red" }}>{saveError}</span>}
-            {saveSuccess && <span style={{ color: "green" }}>{saveSuccess}</span>}
-          </div>
-        </form>
+        </div>
       )}
 
       {loading && <p>Loading matrix scores…</p>}

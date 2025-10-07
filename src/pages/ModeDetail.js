@@ -210,10 +210,13 @@ export default function ModeDetail() {
         </div>
       </div>
 
-      {loading && <p>Loading details…</p>}
+      <div style={{ minHeight: 24, margin: "12px 0" }}>
+        {loading && <span>Loading…</span>}
+        {!loading && saveError && <span style={{ color: "red" }}>{saveError}</span>}
+        {!loading && saveSuccess && <span style={{ color: "green" }}>{saveSuccess}</span>}
+      </div>
+
       {error && <p style={{ color: "red" }}>{error}</p>}
-      {saveError && <p style={{ color: "red" }}>{saveError}</p>}
-      {saveSuccess && <p style={{ color: "green" }}>{saveSuccess}</p>}
 
       {criteria.map((c) => {
         const v = evaluations[c.id]
