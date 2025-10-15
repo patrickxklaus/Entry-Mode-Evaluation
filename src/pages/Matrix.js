@@ -315,26 +315,30 @@ export default function Matrix() {
         {!savingMeta && saveSuccess && <span style={{ color: "green" }}>{saveSuccess}</span>}
       </div>
 
-      <form
-        onSubmit={handleLoadMatrix}
-        style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}
-      >
-        <label style={{ display: "grid", gap: 4 }}>
-          <span><strong>Matrix ID</strong></span>
+      <form onSubmit={handleLoadMatrix} className="matrix-selector">
+        <div className="matrix-selector__field">
+          <label htmlFor="matrix-id">Matrix ID</label>
           <input
+            id="matrix-id"
             type="text"
             value={matrixIdInput}
             onChange={(event) => setMatrixIdInput(event.target.value)}
             placeholder="Paste or enter matrix UUID"
-            style={{ minWidth: 280 }}
           />
-        </label>
-        <button type="submit">Load Matrix</button>
-        <button type="button" onClick={handleCreateMatrix} disabled={creatingMatrix}>
-          {creatingMatrix ? "Creating…" : "Create New Matrix"}
-        </button>
+        </div>
+        <div className="matrix-selector__actions">
+          <button type="submit" className="matrix-selector__primary">Load Matrix</button>
+          <button
+            type="button"
+            className="matrix-selector__secondary"
+            onClick={handleCreateMatrix}
+            disabled={creatingMatrix}
+          >
+            {creatingMatrix ? "Creating…" : "Create New Matrix"}
+          </button>
+        </div>
         {activeMatrixId && (
-          <span style={{ fontSize: 12, color: "#555" }}>Currently loaded: {activeMatrixId}</span>
+          <span className="matrix-selector__status">Currently loaded: {activeMatrixId}</span>
         )}
       </form>
 

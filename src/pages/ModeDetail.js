@@ -491,11 +491,6 @@ export default function ModeDetail() {
                         [c.id]: nextRow,
                       }
                     })
-                    scheduleEvaluationSave(c.id, {
-                      ...(evaluations[c.id] || createDefaultRow()),
-                      sources: nextSources,
-                      exists: true,
-                    })
                   }}
                 >
                   Add Source
