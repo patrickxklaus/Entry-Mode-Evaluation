@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
 
 const STORAGE_KEY = "active-matrix-id"
 
@@ -15,6 +15,9 @@ export function MatrixProvider({ children }) {
   })
 
   const [reloadCounter, setReloadCounter] = useState(0)
+  const pendingSaves = useRef(0)
+  const [pendingCount, setPendingCount] = useState(0)
+  const queuedReload = useRef(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -31,6 +34,28 @@ export function MatrixProvider({ children }) {
 
   const triggerReload = () => {
     setReloadCounter((val) => val + 1)
+    queuedReload.current = false
+  }
+
+  const queueReloadAfterFlush = () => {
+    if (pendingSaves.current === 0) {
+      triggerReload()
+    } else {
+      queuedReload.current = true
+    }
+  }
+
+  const markSaving = () => {
+    pendingSaves.current += 1
+    setPendingCount(pendingSaves.current)
+  }
+
+  const markSaved = () => {
+    pendingSaves.current = Math.max(0, pendingSaves.current - 1)
+    setPendingCount(pendingSaves.current)
+    if (pendingSaves.current === 0 && queuedReload.current) {
+      triggerReload()
+    }
   }
 
   const value = useMemo(
@@ -39,8 +64,13 @@ export function MatrixProvider({ children }) {
       setActiveMatrixId,
       reloadCounter,
       triggerReload,
+      queueReloadAfterFlush,
+      markSaving,
+      markSaved,
+      pendingCount,
+      hasPendingSaves: () => pendingSaves.current > 0,
     }),
-    [activeMatrixId, reloadCounter]
+    [activeMatrixId, reloadCounter, pendingCount]
   )
 
   return <MatrixContext.Provider value={value}>{children}</MatrixContext.Provider>
@@ -53,4 +83,3 @@ export function useMatrixContext() {
   }
   return context
 }
-

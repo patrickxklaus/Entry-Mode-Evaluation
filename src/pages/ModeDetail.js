@@ -13,15 +13,20 @@ import {
 const normalizeKey = (value) =>
   value?.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, "_") ?? ""
 
+const createDefaultRow = () => ({
+  points: 0,
+  persistedPoints: 0,
+  pointsDraft: null,
+  exists: false,
+  justification: "",
+  market_conditions: "",
+  sources: [],
+})
+
 const buildEmptyEvaluations = () => {
   const map = {}
   for (const c of criteria) {
-    map[c.id] = {
-      points: 0,
-      justification: "",
-      market_conditions: "",
-      sources: [],
-    }
+    map[c.id] = createDefaultRow()
   }
   return map
 }
@@ -37,7 +42,12 @@ const clampPoints = (cid, value) => {
 export default function ModeDetail() {
   const { modeId } = useParams()
   const modeName = useMemo(() => entryModes.find(m => modeSlug(m) === modeId), [modeId])
-  const { activeMatrixId, triggerReload } = useMatrixContext()
+  const {
+    activeMatrixId,
+    queueReloadAfterFlush,
+    markSaving,
+    markSaved,
+  } = useMatrixContext()
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -90,8 +100,13 @@ export default function ModeDetail() {
           const criterion = criteria.find(c => normalizeKey(c.id) === criterionId || normalizeKey(c.label) === criterionId)
           const targetId = criterion?.id
           if (!targetId) continue
+          const numericPoints = Number(row.points)
+          const safePoints = Number.isFinite(numericPoints) ? numericPoints : 0
           nextEvaluations[targetId] = {
-            points: Number(row.points) || 0,
+            points: safePoints,
+            persistedPoints: safePoints,
+            pointsDraft: null,
+            exists: true,
             justification: row.justification ?? "",
             market_conditions: row.market_conditions ?? "",
             sources: Array.isArray(row.sources) ? row.sources : [],
@@ -142,20 +157,36 @@ export default function ModeDetail() {
       }
 
       evaluationTimers.current[criterionId] = setTimeout(async () => {
+        markSaving()
         try {
-          await upsertEvaluation(activeMatrixId, modeName, criterionId, row)
-          if (refreshTotals) triggerReload()
+          const { persistedPoints, pointsDraft, exists, ...rest } = row || {}
+          const fallbackPoints = Number.isFinite(persistedPoints) ? persistedPoints : 0
+          const numericPoints = Number(rest.points)
+          const basePoints = Number.isFinite(numericPoints) ? numericPoints : fallbackPoints
+          const safePoints = clampPoints(criterionId, basePoints)
+          const payload = {
+            ...rest,
+            points: safePoints,
+            justification: rest.justification ?? "",
+            market_conditions: rest.market_conditions ?? "",
+            sources: Array.isArray(rest.sources) ? rest.sources : [],
+          }
+          await upsertEvaluation(activeMatrixId, modeName, criterionId, payload)
+          if (refreshTotals) {
+            queueReloadAfterFlush()
+          }
           setSaveSuccess("Changes saved.")
           scheduleSuccessReset()
         } catch (err) {
           console.error("Failed to save evaluation", err)
           setSaveError("Could not save the latest changes.")
         } finally {
+          markSaved()
           delete evaluationTimers.current[criterionId]
         }
       }, 400)
     },
-    [activeMatrixId, modeName, triggerReload, scheduleSuccessReset]
+    [activeMatrixId, modeName, queueReloadAfterFlush, markSaving, markSaved, scheduleSuccessReset]
   )
 
   const scheduleModeNoteSave = useCallback(
@@ -166,17 +197,21 @@ export default function ModeDetail() {
       if (noteTimer.current) clearTimeout(noteTimer.current)
 
       noteTimer.current = setTimeout(async () => {
+        markSaving()
         try {
           await upsertModeNote(activeMatrixId, modeName, payload)
+          queueReloadAfterFlush()
           setSaveSuccess("Changes saved.")
           scheduleSuccessReset()
         } catch (err) {
           console.error("Failed to save mode notes", err)
           setSaveError("Could not save the latest changes.")
+        } finally {
+          markSaved()
         }
       }, 400)
     },
-    [activeMatrixId, modeName, scheduleSuccessReset]
+    [activeMatrixId, modeName, queueReloadAfterFlush, markSaving, markSaved, scheduleSuccessReset]
   )
 
   const total = useMemo(() => {
@@ -243,17 +278,83 @@ export default function ModeDetail() {
               <label>Points Given</label>
               <input
                 type="number"
-                value={v.points}
+                value={
+                  v.pointsDraft !== null && v.pointsDraft !== undefined
+                    ? v.pointsDraft
+                    : Number.isFinite(v.points)
+                      ? v.points
+                      : ""
+                }
                 min={c.min}
                 max={c.max}
                 step={1}
-                onChange={(event) => {
-                  const inputValue = event.target.value
+                onFocus={(event) => {
+                  event.target.select()
                   setEvaluations((prev) => {
-                    const current = prev[c.id] || { points: 0, justification: "", market_conditions: "", sources: [] }
-                    const clamped = clampPoints(c.id, inputValue)
-                    const nextRow = { ...current, points: clamped }
+                    const current = prev[c.id] || createDefaultRow()
+                    return {
+                      ...prev,
+                      [c.id]: { ...current, pointsDraft: "" },
+                    }
+                  })
+                }}
+                onBlur={(event) => {
+                  const raw = event.target.value
+                  setEvaluations((prev) => {
+                    const current = prev[c.id] || createDefaultRow()
+                    const persisted =
+                      current.persistedPoints ?? (Number.isFinite(current.points) ? Number(current.points) : 0)
+                    if (raw === "" || raw === null) {
+                      const nextRow = {
+                        ...current,
+                        points: persisted,
+                        persistedPoints: persisted,
+                        pointsDraft: null,
+                      }
+                      return { ...prev, [c.id]: nextRow }
+                    }
+                    const parsed = Number(raw)
+                    if (!Number.isFinite(parsed)) {
+                      const nextRow = {
+                        ...current,
+                        points: persisted,
+                        persistedPoints: persisted,
+                        pointsDraft: null,
+                      }
+                      return { ...prev, [c.id]: nextRow }
+                    }
+                    const clamped = clampPoints(c.id, parsed)
+                    if (clamped === persisted && current.exists) {
+                      const nextRow = {
+                        ...current,
+                        points: persisted,
+                        persistedPoints: persisted,
+                        pointsDraft: null,
+                      }
+                      return { ...prev, [c.id]: nextRow }
+                    }
+                    const nextRow = {
+                      ...current,
+                      points: clamped,
+                      persistedPoints: clamped,
+                      pointsDraft: null,
+                      exists: true,
+                    }
                     scheduleEvaluationSave(c.id, nextRow, { refreshTotals: true })
+                    return {
+                      ...prev,
+                      [c.id]: nextRow,
+                    }
+                  })
+                }}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setEvaluations((prev) => {
+                    const current = prev[c.id] || createDefaultRow()
+                    const nextRow = {
+                      ...current,
+                      pointsDraft: value,
+                    }
                     return {
                       ...prev,
                       [c.id]: nextRow,
@@ -269,8 +370,8 @@ export default function ModeDetail() {
                 onChange={(event) => {
                   const value = event.target.value
                   setEvaluations((prev) => {
-                    const current = prev[c.id] || { points: 0, justification: "", market_conditions: "", sources: [] }
-                    const nextRow = { ...current, justification: value }
+                    const current = prev[c.id] || createDefaultRow()
+                    const nextRow = { ...current, justification: value, exists: true }
                     scheduleEvaluationSave(c.id, nextRow)
                     return {
                       ...prev,
@@ -288,8 +389,8 @@ export default function ModeDetail() {
                 onChange={(event) => {
                   const value = event.target.value
                   setEvaluations((prev) => {
-                    const current = prev[c.id] || { points: 0, justification: "", market_conditions: "", sources: [] }
-                    const nextRow = { ...current, market_conditions: value }
+                    const current = prev[c.id] || createDefaultRow()
+                    const nextRow = { ...current, market_conditions: value, exists: true }
                     scheduleEvaluationSave(c.id, nextRow)
                     return {
                       ...prev,
@@ -315,8 +416,8 @@ export default function ModeDetail() {
                           const prevSources = prev[c.id]?.sources || []
                           nextSources = [...prevSources]
                           nextSources[idx] = value
-                          const current = prev[c.id] || { points: 0, justification: "", market_conditions: "", sources: [] }
-                          const nextRow = { ...current, sources: nextSources }
+                          const current = prev[c.id] || createDefaultRow()
+                          const nextRow = { ...current, sources: nextSources, exists: true }
                           scheduleEvaluationSave(c.id, nextRow)
                           return {
                             ...prev,
@@ -333,8 +434,8 @@ export default function ModeDetail() {
                           const prevSources = prev[c.id]?.sources || []
                           nextSources = [...prevSources]
                           nextSources.splice(idx, 1)
-                          const current = prev[c.id] || { points: 0, justification: "", market_conditions: "", sources: [] }
-                          const nextRow = { ...current, sources: nextSources }
+                          const current = prev[c.id] || createDefaultRow()
+                          const nextRow = { ...current, sources: nextSources, exists: true }
                           scheduleEvaluationSave(c.id, nextRow)
                           return {
                             ...prev,
@@ -354,8 +455,8 @@ export default function ModeDetail() {
                     setEvaluations((prev) => {
                       const prevSources = prev[c.id]?.sources || []
                       nextSources = [...prevSources, ""]
-                      const current = prev[c.id] || { points: 0, justification: "", market_conditions: "", sources: [] }
-                      const nextRow = { ...current, sources: nextSources }
+                      const current = prev[c.id] || createDefaultRow()
+                      const nextRow = { ...current, sources: nextSources, exists: true }
                       scheduleEvaluationSave(c.id, nextRow)
                       return {
                         ...prev,

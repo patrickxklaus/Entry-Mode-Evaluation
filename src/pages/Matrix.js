@@ -41,7 +41,13 @@ const buildEmptyMeta = () =>
   }, {})
 
 export default function Matrix() {
-  const { activeMatrixId, setActiveMatrixId, reloadCounter, triggerReload } = useMatrixContext()
+  const {
+    activeMatrixId,
+    setActiveMatrixId,
+    reloadCounter,
+    triggerReload,
+    pendingCount,
+  } = useMatrixContext()
   const [scores, setScores] = useState(() => buildEmptyScores())
   const [matrixIdInput, setMatrixIdInput] = useState(() => activeMatrixId ?? "")
   const [matrixMeta, setMatrixMeta] = useState(null)
@@ -87,6 +93,12 @@ export default function Matrix() {
 
   useEffect(() => {
     let isMounted = true
+
+    if (pendingCount > 0) {
+      return () => {
+        isMounted = false
+      }
+    }
 
     const fetchMatrix = async () => {
       if (!activeMatrixId) {
@@ -186,7 +198,7 @@ export default function Matrix() {
     return () => {
       isMounted = false
     }
-  }, [activeMatrixId, reloadCounter, syncEditableMeta])
+  }, [activeMatrixId, reloadCounter, syncEditableMeta, pendingCount])
 
   useEffect(() => {
     setMatrixIdInput(activeMatrixId ?? "")
@@ -432,7 +444,7 @@ export default function Matrix() {
       )}
 
       <div className="suggestion">
-        <h3>Suggestion Based on Results</h3>
+        <h3>Suggestion for the company based on the results:</h3>
         <p>
           {top ? (
             <>
@@ -442,6 +454,9 @@ export default function Matrix() {
           ) : (
             "Add scores to see a suggestion."
           )}
+        </p>
+        <p style={{ fontSize: "0.95rem", color: "#1f5d52", marginTop: -10 }}>
+          Need a refresher on what the score means? Read the <Link to="/rubric">evaluation rubric</Link>.
         </p>
         <textarea
           placeholder="Add qualitative reasoning, risks, implementation considerations..."
