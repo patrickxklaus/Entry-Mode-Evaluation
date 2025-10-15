@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import supabase from "../config/supabaseClient"
+import LoadingOverlay from "../components/LoadingOverlay"
 
 const RPC_ENTRY_MODES = "get_entry_modes"
 const RPC_CRITERIA = "get_evaluation_criteria"
@@ -44,7 +45,9 @@ export default function SqlEnums() {
   }, [])
 
   return (
-    <div className="page">
+    <>
+      <LoadingOverlay visible={loading} message="Loading enum metadata…" />
+      <div className="page">
       <h2>Enum Values from Supabase</h2>
       {loading && <p>Loading enums…</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
@@ -78,7 +81,7 @@ export default function SqlEnums() {
           </section>
         </>
       )}
-    </div>
+      </div>
+    </>
   )
 }
-

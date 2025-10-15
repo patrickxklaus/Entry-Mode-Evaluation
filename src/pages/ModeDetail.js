@@ -9,6 +9,7 @@ import {
   upsertEvaluation,
   upsertModeNote,
 } from "../services/supabaseData"
+import LoadingOverlay from "../components/LoadingOverlay"
 
 const normalizeKey = (value) =>
   value?.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, "_") ?? ""
@@ -33,9 +34,10 @@ const buildEmptyEvaluations = () => {
 
 const clampPoints = (cid, value) => {
   const config = criterionById[cid]
+  if (!config) return value
+  if (value === "" || value === null) return value
   const n = Number(value)
-  if (!Number.isFinite(n)) return 0
-  if (!config) return n
+  if (!Number.isFinite(n)) return config.min ?? 0
   return Math.max(config.min, Math.min(config.max, n))
 }
 
@@ -47,6 +49,7 @@ export default function ModeDetail() {
     queueReloadAfterFlush,
     markSaving,
     markSaved,
+    pendingCount,
   } = useMatrixContext()
 
   const [loading, setLoading] = useState(false)
@@ -236,7 +239,12 @@ export default function ModeDetail() {
   }
 
   return (
-    <div className="page">
+    <>
+      <LoadingOverlay
+        visible={loading || pendingCount > 0}
+        message={loading ? "Loading mode details…" : "Saving changes…"}
+      />
+      <div className="page">
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <h2 style={{ marginRight: 12 }}>{modeName}</h2>
         <Link to="/">Back to Matrix</Link>
@@ -324,6 +332,7 @@ export default function ModeDetail() {
                       return { ...prev, [c.id]: nextRow }
                     }
                     const clamped = clampPoints(c.id, parsed)
+                    const safeValue = Number.isFinite(clamped) ? clamped : persisted
                     if (clamped === persisted && current.exists) {
                       const nextRow = {
                         ...current,
@@ -335,8 +344,8 @@ export default function ModeDetail() {
                     }
                     const nextRow = {
                       ...current,
-                      points: clamped,
-                      persistedPoints: clamped,
+                      points: safeValue,
+                      persistedPoints: safeValue,
                       pointsDraft: null,
                       exists: true,
                     }
@@ -505,6 +514,7 @@ export default function ModeDetail() {
           />
         </div>
       </div>
-    </div>
+      </div>
+    </>
   )
 }

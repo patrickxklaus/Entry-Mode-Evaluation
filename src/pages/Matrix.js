@@ -9,6 +9,7 @@ import {
   updateMatrix as updateMatrixRow,
 } from "../services/supabaseData"
 import { useMatrixContext } from "../context/MatrixContext"
+import LoadingOverlay from "../components/LoadingOverlay"
 
 const normalizeKey = (value) =>
   value?.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, "_") ?? ""
@@ -126,6 +127,7 @@ export default function Matrix() {
             setScores(buildEmptyScores())
             setModeNotes(buildEmptyModeNotes())
             setActiveMatrixId(null)
+            setLoading(false)
           }
           return
         }
@@ -177,6 +179,7 @@ export default function Matrix() {
           setScores(nextScores)
           syncEditableMeta(activeMatrix)
           setMatrixIdInput(activeMatrix.id)
+          setLoading(false)
         }
       } catch (err) {
         console.error("Failed to load matrix data", err)
@@ -186,11 +189,10 @@ export default function Matrix() {
           setMatrixMeta(null)
           syncEditableMeta(null)
           setModeNotes(buildEmptyModeNotes())
-        }
-      } finally {
-        if (isMounted) {
           setLoading(false)
         }
+      } finally {
+        // no-op: loading cleared earlier
       }
     }
 
@@ -269,8 +271,19 @@ export default function Matrix() {
   const topScore = totals[top] ?? 0
 
   return (
-    <div className="page">
-      <div style={{ minHeight: 24, marginBottom: 8 }}>
+    <>
+      <LoadingOverlay
+        visible={loading || savingMeta || pendingCount > 0}
+        message={
+          loading
+            ? "Loading matrix data…"
+            : savingMeta || pendingCount > 0
+              ? "Saving changes…"
+              : "Working…"
+        }
+      />
+      <div className="page">
+      <div style={{ minHeight: 24, marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
         {savingMeta && <span>Saving…</span>}
         {!savingMeta && saveError && <span style={{ color: "red" }}>{saveError}</span>}
         {!savingMeta && saveSuccess && <span style={{ color: "green" }}>{saveSuccess}</span>}
@@ -466,6 +479,7 @@ export default function Matrix() {
           style={{ width: "100%" }}
         />
       </div>
-    </div>
+      </div>
+    </>
   )
 }

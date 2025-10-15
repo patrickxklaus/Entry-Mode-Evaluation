@@ -1,0 +1,52 @@
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 37, 33, 0.42);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+  animation: fadeInOverlay 160ms ease-out;
+}
+
+.loading-card {
+  background: #ffffff;
+  padding: 20px 28px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #0b2521;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
+}
+
+.loading-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(12, 140, 110, 0.2);
+  border-top-color: #0c8c6e;
+  animation: spinnerRotate 0.9s linear infinite;
+}
+
+@keyframes spinnerRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeInOverlay {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+

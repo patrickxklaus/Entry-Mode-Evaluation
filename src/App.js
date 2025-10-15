@@ -10,10 +10,14 @@ function App() {
     <MatrixProvider>
       <BrowserRouter>
         <nav>
-          <h1>Entry Mode Evaluation</h1>
-          <Link to="/">Matrix</Link>
-          <Link to="/sql">SQL Enums</Link>
-          <Link to="/rubric">Rubric</Link>
+          <div className="nav-inner">
+            <h1>Entry Mode Evaluation</h1>
+            <div className="nav-links">
+              <Link to="/">Matrix</Link>
+              <Link to="/sql">SQL Enums</Link>
+              <Link to="/rubric">Rubric</Link>
+            </div>
+          </div>
         </nav>
         <Routes>
           <Route path="/" element={<Matrix />} />
