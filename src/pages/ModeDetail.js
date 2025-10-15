@@ -381,11 +381,17 @@ export default function ModeDetail() {
                   setEvaluations((prev) => {
                     const current = prev[c.id] || createDefaultRow()
                     const nextRow = { ...current, justification: value, exists: true }
-                    scheduleEvaluationSave(c.id, nextRow)
                     return {
                       ...prev,
                       [c.id]: nextRow,
                     }
+                  })
+                }}
+                onBlur={() => {
+                  setEvaluations((prev) => {
+                    const current = prev[c.id] || createDefaultRow()
+                    scheduleEvaluationSave(c.id, current)
+                    return prev
                   })
                 }}
                 rows={3}
@@ -400,11 +406,17 @@ export default function ModeDetail() {
                   setEvaluations((prev) => {
                     const current = prev[c.id] || createDefaultRow()
                     const nextRow = { ...current, market_conditions: value, exists: true }
-                    scheduleEvaluationSave(c.id, nextRow)
                     return {
                       ...prev,
                       [c.id]: nextRow,
                     }
+                  })
+                }}
+                onBlur={() => {
+                  setEvaluations((prev) => {
+                    const current = prev[c.id] || createDefaultRow()
+                    scheduleEvaluationSave(c.id, current)
+                    return prev
                   })
                 }}
                 rows={3}
@@ -420,18 +432,22 @@ export default function ModeDetail() {
                       placeholder="URL or citation"
                       onChange={(event) => {
                         const value = event.target.value
-                        let nextSources = []
                         setEvaluations((prev) => {
                           const prevSources = prev[c.id]?.sources || []
-                          nextSources = [...prevSources]
+                          const nextSources = [...prevSources]
                           nextSources[idx] = value
                           const current = prev[c.id] || createDefaultRow()
-                          const nextRow = { ...current, sources: nextSources, exists: true }
-                          scheduleEvaluationSave(c.id, nextRow)
                           return {
                             ...prev,
-                            [c.id]: nextRow,
+                            [c.id]: { ...current, sources: nextSources, exists: true },
                           }
+                        })
+                      }}
+                      onBlur={() => {
+                        setEvaluations((prev) => {
+                          const current = prev[c.id] || createDefaultRow()
+                          scheduleEvaluationSave(c.id, current)
+                          return prev
                         })
                       }}
                     />
@@ -445,11 +461,15 @@ export default function ModeDetail() {
                           nextSources.splice(idx, 1)
                           const current = prev[c.id] || createDefaultRow()
                           const nextRow = { ...current, sources: nextSources, exists: true }
-                          scheduleEvaluationSave(c.id, nextRow)
                           return {
                             ...prev,
                             [c.id]: nextRow,
                           }
+                        })
+                        scheduleEvaluationSave(c.id, {
+                          ...(evaluations[c.id] || createDefaultRow()),
+                          sources: nextSources,
+                          exists: true,
                         })
                       }}
                     >
@@ -466,11 +486,15 @@ export default function ModeDetail() {
                       nextSources = [...prevSources, ""]
                       const current = prev[c.id] || createDefaultRow()
                       const nextRow = { ...current, sources: nextSources, exists: true }
-                      scheduleEvaluationSave(c.id, nextRow)
                       return {
                         ...prev,
                         [c.id]: nextRow,
                       }
+                    })
+                    scheduleEvaluationSave(c.id, {
+                      ...(evaluations[c.id] || createDefaultRow()),
+                      sources: nextSources,
+                      exists: true,
                     })
                   }}
                 >
@@ -492,8 +516,13 @@ export default function ModeDetail() {
               const value = event.target.value
               setModeNote((prev) => {
                 const next = { ...prev, discussions: value }
-                scheduleModeNoteSave(next)
                 return next
+              })
+            }}
+            onBlur={() => {
+              scheduleModeNoteSave({
+                discussions: modeNote.discussions,
+                observations: modeNote.observations,
               })
             }}
           />
@@ -507,8 +536,13 @@ export default function ModeDetail() {
               const value = event.target.value
               setModeNote((prev) => {
                 const next = { ...prev, observations: value }
-                scheduleModeNoteSave(next)
                 return next
+              })
+            }}
+            onBlur={() => {
+              scheduleModeNoteSave({
+                discussions: modeNote.discussions,
+                observations: modeNote.observations,
               })
             }}
           />

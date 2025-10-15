@@ -54,6 +54,7 @@ export default function Matrix() {
   const [matrixMeta, setMatrixMeta] = useState(null)
   const [modeNotes, setModeNotes] = useState(() => buildEmptyModeNotes())
   const [editableMeta, setEditableMeta] = useState(() => buildEmptyMeta())
+  const [suggestionDraft, setSuggestionDraft] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [savingMeta, setSavingMeta] = useState(false)
@@ -92,6 +93,27 @@ export default function Matrix() {
     }
   }
 
+  const saveSuggestionField = async () => {
+    if (!matrixMeta?.id) return
+    const currentValue = matrixMeta?.suggestion_text ?? ""
+    if (currentValue === suggestionDraft) return
+    setSavingMeta(true)
+    setSaveError(null)
+    setSaveSuccess(null)
+    try {
+      const updated = await updateMatrixRow(matrixMeta.id, { suggestion_text: suggestionDraft })
+      setMatrixMeta(updated)
+      syncEditableMeta(updated)
+      setSuggestionDraft(updated?.suggestion_text ?? "")
+      setSaveSuccess("Details saved.")
+    } catch (err) {
+      console.error("Failed to update matrix suggestion text", err)
+      setSaveError("Could not save the details. Please try again.")
+    } finally {
+      setSavingMeta(false)
+    }
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -108,6 +130,7 @@ export default function Matrix() {
         syncEditableMeta(null)
         setScores(buildEmptyScores())
         setModeNotes(buildEmptyModeNotes())
+        setSuggestionDraft("")
         return
       }
 
@@ -128,6 +151,7 @@ export default function Matrix() {
             setModeNotes(buildEmptyModeNotes())
             setActiveMatrixId(null)
             setLoading(false)
+            setSuggestionDraft("")
           }
           return
         }
@@ -179,6 +203,7 @@ export default function Matrix() {
           setScores(nextScores)
           syncEditableMeta(activeMatrix)
           setMatrixIdInput(activeMatrix.id)
+          setSuggestionDraft(activeMatrix?.suggestion_text ?? "")
           setLoading(false)
         }
       } catch (err) {
@@ -189,6 +214,7 @@ export default function Matrix() {
           setMatrixMeta(null)
           syncEditableMeta(null)
           setModeNotes(buildEmptyModeNotes())
+          setSuggestionDraft("")
           setLoading(false)
         }
       } finally {
@@ -468,13 +494,17 @@ export default function Matrix() {
             "Add scores to see a suggestion."
           )}
         </p>
-        <p style={{ fontSize: "0.95rem", color: "#1f5d52", marginTop: -10 }}>
-          Need a refresher on what the score means? Read the <Link to="/rubric">evaluation rubric</Link>.
-        </p>
+        <p style={{ fontSize: "0.95rem", color: "var(--text-muted)", marginTop: -10 }}>
+      Need a refresher on what the score means? Read the{" "}
+      <Link to="/rubric" style={{ color: "var(--primary)", fontWeight: 600 }}>
+        evaluation rubric
+      </Link>.
+    </p>
         <textarea
           placeholder="Add qualitative reasoning, risks, implementation considerations..."
-          value={matrixMeta?.suggestion_text || ""}
-          readOnly
+          value={suggestionDraft}
+          onChange={(event) => setSuggestionDraft(event.target.value)}
+          onBlur={saveSuggestionField}
           rows={4}
           style={{ width: "100%" }}
         />

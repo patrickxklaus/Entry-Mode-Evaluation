@@ -1,14 +1,15 @@
 @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap");
 
 :root {
-  --primary: #0c8c6e;
-  --primary-soft: #13c7a1;
+  --primary: #0052cc;
+  --primary-soft: #1a6bff;
+  --accent-dark: #000000;
   --surface: #ffffff;
-  --surface-muted: rgba(255, 255, 255, 0.75);
-  --text-main: #0f2b29;
-  --text-muted: #4d6461;
-  --border: rgba(12, 140, 110, 0.15);
-  --shadow: 0 18px 40px rgba(11, 69, 56, 0.12);
+  --surface-muted: rgba(255, 255, 255, 0.9);
+  --text-main: #111111;
+  --text-muted: #444444;
+  --border: rgba(0, 82, 204, 0.18);
+  --shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
 }
 
 * {
@@ -19,7 +20,7 @@ body {
   margin: 0;
   font-family: "Poppins", sans-serif;
   color: var(--text-main);
-  background: linear-gradient(180deg, #f4fbf9 0%, #eef5f4 100%);
+  background: linear-gradient(180deg, #f5f6f9 0%, #ffffff 60%, #eef1f6 100%);
   min-height: 100vh;
 }
 
@@ -36,9 +37,9 @@ a {
 }
 
 nav {
-  background: linear-gradient(120deg, var(--primary) 0%, var(--primary-soft) 100%);
-  padding: 24px 32px;
-  box-shadow: 0 18px 30px rgba(9, 56, 46, 0.22);
+  background: linear-gradient(120deg, var(--accent-dark) 0%, #111 100%);
+  padding: 28px 32px;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.35);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -48,36 +49,51 @@ nav {
   max-width: 1180px;
   margin: 0 auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   color: #fff;
 }
 
 .nav-inner h1 {
-  font-size: 1.75rem;
+  font-size: 2rem;
   letter-spacing: 0.02em;
 }
 
 .nav-links {
   display: inline-flex;
-  gap: 18px;
+  gap: 36px;
   align-items: center;
-  font-weight: 500;
-  font-size: 1rem;
+  font-weight: 600;
+  font-size: 1.15rem;
 }
 
 .nav-links a {
+  position: relative;
   color: rgba(255, 255, 255, 0.9);
-  padding-bottom: 4px;
-  border-bottom: 2px solid transparent;
-  transition: border-color 120ms ease, color 120ms ease;
+  padding-bottom: 6px;
+  transition: color 120ms ease;
+}
+
+.nav-links a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--primary-soft);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 180ms ease;
 }
 
 .nav-links a:hover {
   color: #fff;
-  border-bottom-color: rgba(255, 255, 255, 0.6);
+}
+
+.nav-links a:hover::after {
+  transform: scaleX(1);
 }
 
 .page {
@@ -99,6 +115,7 @@ nav {
   padding: 24px;
   box-shadow: var(--shadow);
   border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
 }
 
 .matrix-wrapper {
@@ -113,7 +130,7 @@ nav {
 }
 
 .matrix thead th {
-  background: rgba(12, 140, 110, 0.08);
+  background: rgba(0, 82, 204, 0.06);
   padding: 14px 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -123,16 +140,21 @@ nav {
 
 .matrix td {
   padding: 14px 12px;
-  border-bottom: 1px solid rgba(12, 140, 110, 0.08);
+  border-bottom: 1px solid rgba(0, 82, 204, 0.08);
   text-align: center;
 }
 
-.matrix tbody tr:hover {
-  background: rgba(12, 140, 110, 0.05);
+.matrix tbody tr {
+  transition: background 120ms ease, transform 120ms ease;
 }
 
 .matrix tbody tr:nth-child(even) {
-  background: rgba(12, 140, 110, 0.02);
+  background: rgba(0, 82, 204, 0.03);
+}
+
+.matrix tbody tr:hover {
+  background: rgba(0, 82, 204, 0.12);
+  transform: translateX(2px);
 }
 
 .matrix th:first-child,
@@ -144,7 +166,7 @@ nav {
   width: 84px;
   padding: 6px 8px;
   border-radius: 10px;
-  border: 1px solid rgba(12, 140, 110, 0.26);
+  border: 1px solid rgba(0, 82, 204, 0.26);
   background: rgba(255, 255, 255, 0.9);
   font-weight: 500;
 }
@@ -180,7 +202,7 @@ nav {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: rgba(12, 140, 110, 0.08);
+  background: rgba(0, 82, 204, 0.08);
   border-radius: 12px;
   cursor: pointer;
   color: var(--primary);
@@ -197,8 +219,8 @@ nav {
 button {
   padding: 10px 18px;
   border-radius: 12px;
-  border: 1px solid rgba(12, 140, 110, 0.2);
-  background: linear-gradient(135deg, rgba(12, 140, 110, 0.12), rgba(12, 140, 110, 0.24));
+  border: 1px solid rgba(0, 82, 204, 0.2);
+  background: linear-gradient(135deg, rgba(0, 82, 204, 0.1), rgba(0, 82, 204, 0.22));
   color: var(--primary);
   font-weight: 600;
   cursor: pointer;
@@ -208,7 +230,7 @@ button {
 button:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow);
-  background: linear-gradient(135deg, rgba(12, 140, 110, 0.18), rgba(12, 140, 110, 0.32));
+  background: linear-gradient(135deg, rgba(0, 82, 204, 0.18), rgba(0, 82, 204, 0.35));
 }
 
 button:disabled {
@@ -226,6 +248,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  backdrop-filter: blur(12px);
 }
 
 .row {
@@ -247,7 +270,7 @@ textarea {
   width: 100%;
   padding: 12px 14px;
   border-radius: 12px;
-  border: 1px solid rgba(12, 140, 110, 0.18);
+  border: 1px solid rgba(0, 82, 204, 0.18);
   background: rgba(255, 255, 255, 0.9);
   font-family: inherit;
   font-size: 0.95rem;
@@ -258,7 +281,7 @@ input:focus,
 textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(12, 140, 110, 0.15);
+  box-shadow: 0 0 0 3px rgba(0, 82, 204, 0.2);
 }
 
 textarea {
@@ -288,13 +311,12 @@ textarea {
   }
 
   .nav-inner {
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
   }
 
   .nav-links {
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 18px;
   }
 
   .page {
