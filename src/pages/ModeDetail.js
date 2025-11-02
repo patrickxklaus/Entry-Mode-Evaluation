@@ -58,17 +58,24 @@ export default function ModeDetail() {
   const [modeNote, setModeNote] = useState({ discussions: "", observations: "" })
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(null)
+  const [debouncePending, setDebouncePending] = useState(0)
 
   const evaluationTimers = useRef({})
   const noteTimer = useRef(null)
   const successTimer = useRef(null)
+  const isMountedRef = useRef(true)
 
   useEffect(() => {
     return () => {
+      isMountedRef.current = false
       for (const timer of Object.values(evaluationTimers.current)) {
         clearTimeout(timer)
       }
-      if (noteTimer.current) clearTimeout(noteTimer.current)
+      evaluationTimers.current = {}
+      if (noteTimer.current) {
+        clearTimeout(noteTimer.current)
+        noteTimer.current = null
+      }
       if (successTimer.current) clearTimeout(successTimer.current)
     }
   }, [])
@@ -149,6 +156,16 @@ export default function ModeDetail() {
     successTimer.current = setTimeout(() => setSaveSuccess(null), 2500)
   }, [])
 
+  const incrementDebounce = useCallback(() => {
+    if (!isMountedRef.current) return
+    setDebouncePending((count) => count + 1)
+  }, [])
+
+  const decrementDebounce = useCallback(() => {
+    if (!isMountedRef.current) return
+    setDebouncePending((count) => Math.max(0, count - 1))
+  }, [])
+
   const scheduleEvaluationSave = useCallback(
     (criterionId, row, { refreshTotals = false } = {}) => {
       if (!activeMatrixId || !modeName) return
@@ -157,10 +174,14 @@ export default function ModeDetail() {
 
       if (evaluationTimers.current[criterionId]) {
         clearTimeout(evaluationTimers.current[criterionId])
+        decrementDebounce()
       }
+
+      incrementDebounce()
 
       evaluationTimers.current[criterionId] = setTimeout(async () => {
         markSaving()
+        decrementDebounce()
         try {
           const { persistedPoints, pointsDraft, exists, ...rest } = row || {}
           const fallbackPoints = Number.isFinite(persistedPoints) ? persistedPoints : 0
@@ -189,7 +210,16 @@ export default function ModeDetail() {
         }
       }, 400)
     },
-    [activeMatrixId, modeName, queueReloadAfterFlush, markSaving, markSaved, scheduleSuccessReset]
+    [
+      activeMatrixId,
+      modeName,
+      queueReloadAfterFlush,
+      markSaving,
+      markSaved,
+      scheduleSuccessReset,
+      incrementDebounce,
+      decrementDebounce,
+    ]
   )
 
   const scheduleModeNoteSave = useCallback(
@@ -197,10 +227,17 @@ export default function ModeDetail() {
       if (!activeMatrixId || !modeName) return
       setSaveError(null)
       setSaveSuccess(null)
-      if (noteTimer.current) clearTimeout(noteTimer.current)
+      if (noteTimer.current) {
+        clearTimeout(noteTimer.current)
+        decrementDebounce()
+        noteTimer.current = null
+      }
+
+      incrementDebounce()
 
       noteTimer.current = setTimeout(async () => {
         markSaving()
+        decrementDebounce()
         try {
           await upsertModeNote(activeMatrixId, modeName, payload)
           queueReloadAfterFlush()
@@ -211,10 +248,20 @@ export default function ModeDetail() {
           setSaveError("Could not save the latest changes.")
         } finally {
           markSaved()
+          noteTimer.current = null
         }
       }, 400)
     },
-    [activeMatrixId, modeName, queueReloadAfterFlush, markSaving, markSaved, scheduleSuccessReset]
+    [
+      activeMatrixId,
+      modeName,
+      queueReloadAfterFlush,
+      markSaving,
+      markSaved,
+      scheduleSuccessReset,
+      incrementDebounce,
+      decrementDebounce,
+    ]
   )
 
   const total = useMemo(() => {
@@ -241,7 +288,7 @@ export default function ModeDetail() {
   return (
     <>
       <LoadingOverlay
-        visible={loading || pendingCount > 0}
+        visible={loading || pendingCount > 0 || debouncePending > 0}
         message={loading ? "Loading mode details…" : "Saving changes…"}
       />
       <div className="page">

@@ -50,3 +50,11 @@
   }
 }
 
+body.loading-overlay-active {
+  cursor: wait;
+  overflow: hidden;
+}
+
+body.loading-overlay-active .loading-overlay {
+  cursor: wait;
+}

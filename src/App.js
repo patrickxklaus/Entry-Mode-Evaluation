@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Link } from "react-router-dom"
 import Matrix from "./pages/Matrix"
 import ModeDetail from "./pages/ModeDetail"
 import Rubric from "./pages/Rubric"
+import Admin from "./pages/Admin"
 import { MatrixProvider } from "./context/MatrixContext"
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
             <div className="nav-links">
               <Link to="/">Matrix</Link>
               <Link to="/rubric">Rubric</Link>
+              <Link to="/admin">Admin</Link>
             </div>
           </div>
         </nav>
@@ -21,6 +23,7 @@ function App() {
           <Route path="/" element={<Matrix />} />
           <Route path="/mode/:modeId" element={<ModeDetail />} />
           <Route path="/rubric" element={<Rubric />} />
+          <Route path="/admin" element={<Admin />} />
         </Routes>
       </BrowserRouter>
     </MatrixProvider>

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { criteria, entryModes, modeSlug } from "../data/defaults"
 import {
-  createMatrix as createMatrixRow,
   getMatrixById,
   getEvaluationsForMatrix,
   getModeNotesForMatrix,
@@ -10,6 +9,7 @@ import {
 } from "../services/supabaseData"
 import { useMatrixContext } from "../context/MatrixContext"
 import LoadingOverlay from "../components/LoadingOverlay"
+import { exportMatrixReport } from "../utils/exportMatrixReport"
 
 const normalizeKey = (value) =>
   value?.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, "_") ?? ""
@@ -60,7 +60,9 @@ export default function Matrix() {
   const [savingMeta, setSavingMeta] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(null)
-  const [creatingMatrix, setCreatingMatrix] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
+  const [exportError, setExportError] = useState(null)
+  const [exportSuccess, setExportSuccess] = useState(null)
 
   const syncEditableMeta = useCallback((data) => {
     setEditableMeta(() => {
@@ -131,6 +133,8 @@ export default function Matrix() {
         setScores(buildEmptyScores())
         setModeNotes(buildEmptyModeNotes())
         setSuggestionDraft("")
+        setExportSuccess(null)
+        setExportError(null)
         return
       }
 
@@ -152,6 +156,8 @@ export default function Matrix() {
             setActiveMatrixId(null)
             setLoading(false)
             setSuggestionDraft("")
+            setExportSuccess(null)
+            setExportError(null)
           }
           return
         }
@@ -244,6 +250,8 @@ export default function Matrix() {
       return
     }
     setError(null)
+    setExportError(null)
+    setExportSuccess(null)
     if (trimmedId === activeMatrixId) {
       triggerReload()
     } else {
@@ -251,20 +259,23 @@ export default function Matrix() {
     }
   }
 
-  const handleCreateMatrix = async () => {
-    setCreatingMatrix(true)
-    setError(null)
-    setSaveError(null)
-      setSaveSuccess(null)
+  const handleExportPdf = async () => {
+    if (!activeMatrixId) {
+      setExportError("Load a matrix before exporting a PDF.")
+      setExportSuccess(null)
+      return
+    }
+    setExportError(null)
+    setExportSuccess(null)
+    setExportingPdf(true)
     try {
-      const matrix = await createMatrixRow()
-      setMatrixIdInput(matrix.id)
-      setActiveMatrixId(matrix.id)
+      await exportMatrixReport(activeMatrixId)
+      setExportSuccess("PDF exported successfully. Check your downloads folder.")
     } catch (err) {
-      console.error("Failed to create matrix", err)
-      setError("Could not create a new matrix. Please try again.")
+      console.error("Failed to export matrix PDF", err)
+      setExportError("Could not generate the PDF. Please try again.")
     } finally {
-      setCreatingMatrix(false)
+      setExportingPdf(false)
     }
   }
 
@@ -309,10 +320,12 @@ export default function Matrix() {
         }
       />
       <div className="page">
-      <div style={{ minHeight: 24, marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ minHeight: 24, marginBottom: 8, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         {savingMeta && <span>Saving…</span>}
         {!savingMeta && saveError && <span style={{ color: "red" }}>{saveError}</span>}
         {!savingMeta && saveSuccess && <span style={{ color: "green" }}>{saveSuccess}</span>}
+        {exportError && <span style={{ color: "red" }}>{exportError}</span>}
+        {exportSuccess && <span style={{ color: "green" }}>{exportSuccess}</span>}
       </div>
 
       <form onSubmit={handleLoadMatrix} className="matrix-selector">
@@ -331,10 +344,10 @@ export default function Matrix() {
           <button
             type="button"
             className="matrix-selector__secondary"
-            onClick={handleCreateMatrix}
-            disabled={creatingMatrix}
+            onClick={handleExportPdf}
+            disabled={exportingPdf || !activeMatrixId}
           >
-            {creatingMatrix ? "Creating…" : "Create New Matrix"}
+            {exportingPdf ? "Exporting…" : "Export as PDF"}
           </button>
         </div>
         {activeMatrixId && (
@@ -344,7 +357,8 @@ export default function Matrix() {
 
       {!activeMatrixId && (
         <p style={{ marginBottom: 16 }}>
-          Enter a matrix ID to load existing data or create a new matrix to begin editing.
+          Enter a matrix ID to load existing data. You can create new matrices from the{" "}
+          <Link to="/admin" style={{ fontWeight: 600 }}>Admin page</Link>.
         </p>
       )}
 
